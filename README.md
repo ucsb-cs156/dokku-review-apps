@@ -10,6 +10,16 @@ Add the following secrets:
 - `SSH_USERNAME`: Set this to the username for the service account on Dokku; For CS156 this is `dokkudeploy`.
 - `PORT`: Set to 22 unless instructed otherwise.
 
+## Organization Level OIDC
+Our implementation of OpkSSH requires a custom OIDC sub template. This can be set on the organization level at this page, replacing `<your-organization>` for your GitHub organization:
+```
+https://github.com/organizations/<your-organization>/settings/actions/oidc-configuration
+```
+
+Set the subject claim template to `repo, job_workflow_ref` and ensure that "Use Immutable Subject Claim" is enabled.
+<img width="1496" height="1005" alt="image" src="https://github.com/user-attachments/assets/52ee81fd-3f0e-49a4-9704-58b2f89cebf0" />
+
+
 ## Repo Level Variables
 You'll need the two following GitHub Actions Variables. These are usually set at the repository level (under settings -> secrets and variables -> actions -> variables):
 - `HOST_URL`: This is the base DNS name for the dokku server that's been configured for Review Apps, for example `dokku-00.cs.ucsb.edu`.
