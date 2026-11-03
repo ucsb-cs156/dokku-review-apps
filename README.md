@@ -11,7 +11,7 @@ Add the following secrets:
 - `PORT`: Set to 22 unless instructed otherwise.
 
 ## Repo Level Variables
-You'll need the two following GitHub Actions Variables:
+You'll need the two following GitHub Actions Variables. These are usually set at the repository level (under settings -> secrets and variables -> actions -> variables):
 - `HOST_URL`: This is the base DNS name for the dokku server that's been configured for Review Apps, for example `dokku-00.cs.ucsb.edu`.
 - `TEMPLATE_APP_NAME`: This variable points to a valid app on the Dokku server that you'd like to serve as the base template for Review Apps.
 
