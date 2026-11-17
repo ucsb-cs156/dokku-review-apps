@@ -21,7 +21,7 @@ Set the subject claim template to `repo, job_workflow_ref` and ensure that "Use 
 
 
 ## Repo Level Variables
-You'll need the two following GitHub Actions Variables. These are usually set at the repository level (under settings -> secrets and variables -> actions -> variables):
+The following two variables can be configured to set a custom host url or a custom template app name; otherwise, they are automatically determined by our current tag and build script:
 - `HOST_URL`: This is the base DNS name for the dokku server that's been configured for Review Apps, for example `dokku-00.cs.ucsb.edu`.
 - `TEMPLATE_APP_NAME`: This variable points to a valid app on the Dokku server that you'd like to serve as the base template for Review Apps.
 
