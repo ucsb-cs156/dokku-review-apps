@@ -37,7 +37,7 @@ jobs:
       - name: Check Concurrency Group
         id: check-concurrency-group
         env:
-          CONCURRENCY_GROUP: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+          CONCURRENCY_GROUP: ${{ github.workflow }}-main
           REPO: ${{ github.repository }}
           RUN_ID: ${{ github.run_id }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
