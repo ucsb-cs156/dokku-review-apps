@@ -1,0 +1,164 @@
+name: deploy-app.yml
+on:
+  workflow_call:
+    inputs:
+      docker_image:
+        required: true
+        type: string
+      host_url:
+        required: true
+        type: string
+    secrets:
+      PORT:
+        required: true
+      SSH_USERNAME:
+        required: true
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+  queue: max
+
+permissions:
+  id-token: write
+  actions: read
+  contents: read
+  pull-requests: read
+  deployments: write
+
+jobs:
+  evaluate-queue:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+    outputs:
+      should_continue: ${{ steps.check-concurrency-group.outputs.should_continue }}
+    steps:
+      - name: Check Concurrency Group
+        id: check-concurrency-group
+        env:
+          CONCURRENCY_GROUP: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          CONCURRENCY_GROUPS=$(gh api -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2026-03-10" "/repos/$REPO/actions/concurrency_groups/$CONCURRENCY_GROUP" | jq -r '.group_members | length')
+           if [[ "$CONCURRENCY_GROUPS" -gt 1 ]]; then
+            echo "::warning:: There are runs queued after this, exiting early."
+            echo "should_continue=false" >> $GITHUB_OUTPUT
+          else
+            echo "should_continue=true" >> $GITHUB_OUTPUT
+          fi
+
+  create-deployment:
+    runs-on: ubuntu-latest
+    permissions:
+      deployments: write
+    needs: evaluate-queue
+    if: ${{ needs.evaluate-queue.outputs.should_continue == 'true' }}
+    outputs:
+      deployment_id: ${{ steps.create-deployment.outputs.deployment_id }}
+      prod_name: ${{ steps.determine-project.outputs.DOKKU_PROD_APP }}
+      qa_name: ${{ steps.determine-project.outputs.DOKKU_QA_APP }}
+    steps:
+      - name: Determine Project
+        id: determine-project
+        run: |
+          echo "REPO=${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+          MATCH_DOKKU="$(echo "$GITHUB_REPOSITORY" | grep -Po ".*\K\d{2}")"
+          MATCH_TEMPLATE_APP="$(echo "$GITHUB_REPOSITORY" | grep -Po "(?<=proj-)\w+")"
+          DOKKU_URL="$(echo "dokku-{1}.cs.ucsb.edu" | sed "s/{1}/${MATCH_DOKKU}/")"
+          DOKKU_PROD_APP="$(echo "{1}" | sed "s/{1}/${MATCH_TEMPLATE_APP}/")"
+          DOKKU_QA_APP="$(echo "{1}-qa" | sed "s/{1}/${MATCH_TEMPLATE_APP}/")"
+          echo "DOKKU_PROD_APP=${DOKKU_PROD_APP}" >> "$GITHUB_OUTPUT"
+          echo "DOKKU_QA_APP=${DOKKU_QA_APP}" >> "$GITHUB_OUTPUT"
+          echo "DOKKU_URL=${DOKKU_URL}" >> "$GITHUB_OUTPUT"
+      - name: Create Prod Deployment
+        id: create-deployment
+        uses: chrnorm/deployment-action@v2
+        with:
+          auto-inactive: 'true'
+          production-environment: true
+          initial-status: 'in_progress'
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ github.head_ref || github.ref }}
+          environment-url: https://${{ steps.determine-project.outputs.DOKKU_PROD_APP }}.${{ inputs.host_url }}
+          environment: ${{ steps.determine-project.outputs.DOKKU_PROD_APP }}
+      - name: Create QA Deployment
+        id: create-deployment
+        uses: chrnorm/deployment-action@v2
+        with:
+          auto-inactive: 'true'
+          initial-status: 'in_progress'
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ github.head_ref || github.ref }}
+          environment-url: https://${{ steps.determine-project.outputs.DOKKU_QA_APP }}.${{ inputs.host_url }}
+          environment: ${{ steps.determine-project.outputs.DOKKU_QA_APP }}
+
+  create-review-app:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+      pull-requests: read
+      deployments: write
+    needs:
+      - evaluate-queue
+      - create-deployment
+    if: ${{ needs.evaluate-queue.outputs.should_continue == 'true' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          
+      - name: Get Public IP
+        id: ip
+        uses: haythem/public-ip@v1.3
+
+      - name: Install opkssh
+        run: curl -sSLf https://raw.githubusercontent.com/openpubkey/opkssh/main/scripts/install-linux.sh | sudo bash
+
+      - name: Login
+        run: opkssh login github
+
+      - name: SSH into server
+        id: deploy
+        env:
+          HOST_URL: ${{ inputs.host_url }}
+          PORT: ${{ secrets.PORT }}
+          DOKKU_PROD_APP_NAME: ${{ needs.create-deployment.outputs.prod_name }}
+          DOKKU_QA_APP_NAME: ${{ needs.create-deployment.outputs.qa_name }}
+          DOCKER_IMAGE: ${{ inputs.docker_image }}
+          SSH_USERNAME: ${{ secrets.SSH_USERNAME }}
+        run: |
+          ssh -o "StrictHostKeyChecking=accept-new" -p $PORT "$SSH_USERNAME@$HOST_URL" "deploy" "$DOKKU_QA_APP_NAME" "$DOKKU_PROD_APP_NAME" "$DOCKER_IMAGE"
+          ssh -o "StrictHostKeyChecking=accept-new" -p $PORT "$SSH_USERNAME@$HOST_URL" "deploy" "$DOKKU_QA_APP_NAME" "$DOKKU_QA_APP_NAME" "$DOCKER_IMAGE"
+
+      - name: Report success for prod
+        if: success()
+        uses: chrnorm/deployment-status@v2
+        with:
+          deployment-id: ${{ needs.create-deployment.outputs.deployment_id }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          auto-inactive: 'true'
+          environment-url: https://${{ needs.create-deployment.outputs.prod_name }}.${{ inputs.host_url }}
+          state: 'success'
+
+      - name: Report success for qa
+        if: success()
+        uses: chrnorm/deployment-status@v2
+        with:
+          deployment-id: ${{ needs.create-deployment.outputs.deployment_id }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          auto-inactive: 'true'
+          environment-url: https://${{ needs.create-deployment.outputs.qa_name }}.${{ inputs.host_url }}
+          state: 'success'
+
+      - name: Report failure
+        if: failure()
+        uses: chrnorm/deployment-status@v2
+        with:
+          deployment-id: ${{ needs.create-deployment.outputs.deployment_id }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          state: 'failure'
