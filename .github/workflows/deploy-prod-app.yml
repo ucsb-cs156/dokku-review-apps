@@ -148,23 +148,25 @@ jobs:
           ssh -o "StrictHostKeyChecking=accept-new" -p $PORT "$SSH_USERNAME@$HOST_URL" "deploy" "$DOKKU_QA_APP_NAME" "$DOKKU_QA_APP_NAME" "$DOCKER_IMAGE"
 
       - name: Report success for prod
-        if: success() && steps.deploy-prod.outcome == 'success'
+        if: steps.deploy-prod.outcome == 'success'
+        continue-on-error: true
         uses: chrnorm/deployment-status@v2
         with:
           deployment-id: ${{ needs.create-deployment.outputs.deployment_id_prod }}
           token: ${{ secrets.GITHUB_TOKEN }}
           auto-inactive: 'true'
-          environment-url: https://${{ needs.create-deployment.outputs.prod_name }}.${{ inputs.host_url }}
+          environment-url: https://${{ needs.create-deployment.outputs.prod_name }}.${{ inputs.host_url || needs.create-deployment.outputs.dokku_url }}
           state: 'success'
 
       - name: Report success for qa
-        if: success() && steps.deploy-qa.outcome == 'success'
+        if: steps.deploy-qa.outcome == 'success'
+        continue-on-error: true
         uses: chrnorm/deployment-status@v2
         with:
           deployment-id: ${{ needs.create-deployment.outputs.deployment_id_qa }}
           token: ${{ secrets.GITHUB_TOKEN }}
           auto-inactive: 'true'
-          environment-url: https://${{ needs.create-deployment.outputs.qa_name }}.${{ inputs.host_url }}
+          environment-url: https://${{ needs.create-deployment.outputs.qa_name }}.${{ inputs.host_url || needs.create-deployment.outputs.dokku_url }}
           state: 'success'
 
       - name: Report failure
