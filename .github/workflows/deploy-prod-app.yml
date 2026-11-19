@@ -6,7 +6,7 @@ on:
         required: true
         type: string
       host_url:
-        required: true
+        required: false
         type: string
     secrets:
       PORT:
@@ -60,6 +60,7 @@ jobs:
       deployment_id: ${{ steps.create-deployment.outputs.deployment_id }}
       prod_name: ${{ steps.determine-project.outputs.DOKKU_PROD_APP }}
       qa_name: ${{ steps.determine-project.outputs.DOKKU_QA_APP }}
+      dokku_url: ${{ steps.determine-project.outputs.DOKKU_URL }}
     steps:
       - name: Determine Project
         id: determine-project
@@ -125,7 +126,7 @@ jobs:
       - name: SSH into server
         id: deploy
         env:
-          HOST_URL: ${{ inputs.host_url }}
+          HOST_URL: ${{ inputs.host_url || needs.create-deployment.outputs.dokku_url }}
           PORT: ${{ secrets.PORT }}
           DOKKU_PROD_APP_NAME: ${{ needs.create-deployment.outputs.prod_name }}
           DOKKU_QA_APP_NAME: ${{ needs.create-deployment.outputs.qa_name }}
