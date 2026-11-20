@@ -68,7 +68,7 @@ jobs:
         run: |
           echo "REPO=${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
           MATCH_DOKKU="$(echo "$GITHUB_REPOSITORY" | grep -Po ".*\K\d{2}")"
-          MATCH_TEMPLATE_APP="$(echo "$GITHUB_REPOSITORY" | grep -Po "(?<=proj-)\w+")"
+          MATCH_TEMPLATE_APP="$(echo "$GITHUB_REPOSITORY" | grep -Po "(?<=proj-)[\w-]+(?=-\w\d{2})")"
           DOKKU_URL="$(echo "dokku-{1}.cs.ucsb.edu" | sed "s/{1}/${MATCH_DOKKU}/")"
           DOKKU_PROD_APP="$(echo "{1}" | sed "s/{1}/${MATCH_TEMPLATE_APP}/")"
           DOKKU_QA_APP="$(echo "{1}-qa" | sed "s/{1}/${MATCH_TEMPLATE_APP}/")"
